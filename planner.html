@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vintage Story — Building Planner</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0d1117;
+  color: #cdd9e5;
+  font-family: 'Consolas', 'Courier New', monospace;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#toolbar {
+  background: #161b22;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+  min-height: 38px;
+  height: auto;
+}
+
+.sep { width: 1px; align-self: stretch; background: #30363d; flex-shrink: 0; }
+.lbl { font-size: 11px; color: #8b949e; white-space: nowrap; }
+
+input[type=number] {
+  width: 40px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #cdd9e5;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  text-align: center;
+}
+input[type=number]:focus { outline: 1px solid #58a6ff; }
+
+button {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #cdd9e5;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+button:hover { background: #30363d; border-color: #8b949e; }
+
+#palette { display: flex; gap: 4px; align-items: center; }
+
+.pal-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  position: relative;
+}
+
+.swatch {
+  width: 20px; height: 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+  transition: transform 0.08s;
+  position: relative;
+}
+.swatch:hover { transform: scale(1.2); z-index: 1; }
+.swatch.sel { border-color: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.6); }
+
+.pal-item:hover .swatch::after {
+  content: '✎';
+  position: absolute;
+  bottom: -1px; right: -1px;
+  font-size: 7px;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  border-radius: 1px;
+  line-height: 1;
+  padding: 0 1px;
+  pointer-events: none;
+}
+
+.pal-count {
+  font-size: 9px;
+  color: #4a5568;
+  min-width: 20px;
+  text-align: center;
+  line-height: 1;
+  letter-spacing: -0.3px;
+}
+.pal-item:has(.swatch.sel) .pal-count { color: #8b949e; }
+
+.eraser-tool {
+  width: 20px; height: 20px;
+  border-radius: 3px;
+  background: #21262d;
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  color: #8b949e;
+  flex-shrink: 0;
+}
+.eraser-tool:hover { background: #30363d; }
+.eraser-tool.sel { border-color: #fff; color: #fff; }
+
+#tooltip {
+  position: fixed;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #cdd9e5;
+  font-size: 11px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  padding: 5px 9px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+  transform: translateX(-50%);
+}
+#tooltip.visible { opacity: 1; }
+#tooltip .tt-key {
+  display: inline-block;
+  background: #0d1117;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 10px;
+  margin: 0 1px;
+  color: #aaa;
+}
+
+#btn-export { color: #58a6ff; border-color: #1f3d5c; }
+#btn-export:hover { background: #0d2137; border-color: #58a6ff; }
+#btn-import { color: #3fb950; border-color: #1a3a20; }
+#btn-import:hover { background: #0d2010; border-color: #3fb950; }
+
+#z-val { font-size: 13px; min-width: 30px; text-align: center; color: #58a6ff; font-weight: bold; }
+
+input[type=range] { width: 60px; accent-color: #58a6ff; cursor: pointer; }
+
+#btn-clear {
+  color: #f85149; border-color: #6e3232;
+  position: relative; overflow: hidden;
+}
+#btn-clear:hover { background: #3d1f1f; border-color: #f85149; }
+#btn-clear::after {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(248,81,73,0.32);
+  transform: scaleX(0); transform-origin: left;
+  transition: none; pointer-events: none;
+}
+#btn-clear.holding::after { transform: scaleX(1); transition: transform 2s linear; }
+
+#btn-copy-z, #btn-paste-z { font-size: 10px; padding: 2px 5px; }
+#btn-paste-z:disabled { opacity: 0.35; cursor: default; }
+#btn-theme { font-size: 14px; padding: 1px 7px; }
+
+#main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  overflow: hidden;
+}
+
+.panel {
+  position: relative;
+  border: 1px solid #21262d;
+  overflow: hidden;
+  background: #050d18;
+}
+
+.panel canvas { display: block; position: absolute; top: 0; left: 0; }
+
+.plbl {
+  position: absolute;
+  top: 5px; left: 8px;
+  font-size: 10px;
+  color: #8b949e;
+  pointer-events: none;
+  z-index: 10;
+  background: rgba(5,13,24,0.85);
+  padding: 1px 5px;
+  border-radius: 2px;
+  letter-spacing: 0.3px;
+}
+
+#panel-paint .plbl { color: #58a6ff; }
+#cv-3d { cursor: grab; }
+#cv-3d:active { cursor: grabbing; }
+#cv-paint { cursor: crosshair; }
+
+#statusbar {
+  background: #161b22;
+  border-top: 1px solid #21262d;
+  font-size: 10px;
+  color: #8b949e;
+  padding: 2px 10px;
+  flex-shrink: 0;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+#statusbar b { color: #cdd9e5; font-weight: normal; }
+
+/* ── Light theme ─────────────────────────────────────────────────────────────── */
+body.light { background: #f6f8fa; color: #1f2328; }
+body.light #toolbar { background: #ffffff; border-bottom-color: #d0d7de; }
+body.light #statusbar { background: #ffffff; border-top-color: #d0d7de; color: #656d76; }
+body.light #statusbar b { color: #1f2328; }
+body.light .sep { background: #d0d7de; }
+body.light .lbl { color: #656d76; }
+body.light button { background: #eaeef2; border-color: #d0d7de; color: #1f2328; }
+body.light button:hover { background: #d0d7de; border-color: #8c959f; }
+body.light input[type=number] { background: #ffffff; border-color: #d0d7de; color: #1f2328; }
+body.light input[type=range] { accent-color: #0969da; }
+body.light .panel { border-color: #d0d7de; background: #e8edf3; }
+body.light .plbl { color: #656d76; background: rgba(240,244,248,0.92); }
+body.light #panel-paint .plbl { color: #0969da; }
+body.light .swatch { box-shadow: 0 0 0 1px rgba(0,0,0,0.12); }
+body.light .swatch.sel { border-color: #1f2328; box-shadow: none; }
+body.light .eraser-tool { background: #eaeef2; color: #656d76; border-color: transparent; }
+body.light .eraser-tool.sel { border-color: #1f2328; color: #1f2328; }
+body.light .pal-count { color: #8c959f; }
+body.light .pal-item:has(.swatch.sel) .pal-count { color: #1f2328; }
+body.light #z-val { color: #0969da; }
+body.light #tooltip { background: #ffffff; border-color: #d0d7de; color: #1f2328; box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+body.light .tt-key { background: #eaeef2; border-color: #d0d7de; color: #656d76; }
+body.light #btn-export { color: #0969da; border-color: #c8d8ef; }
+body.light #btn-export:hover { background: #ddeeff; border-color: #0969da; }
+body.light #btn-import { color: #1a7f37; border-color: #b6dfc4; }
+body.light #btn-import:hover { background: #ddf4e4; border-color: #1a7f37; }
+body.light #btn-clear { border-color: #f0b0ac; }
+body.light #btn-clear:hover { background: #ffeeee; border-color: #f85149; }
+body.light #btn-clear::after { background: rgba(248,81,73,0.18); }
+body.light #btn-paste-z:disabled { opacity: 0.3; }
+
+/* ── Menu ───────────────────────────────────────────────────────────────────── */
+#menu-wrap { position: relative; }
+#btn-menu { letter-spacing: 1px; }
+
+#menu-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  z-index: 200;
+  padding: 6px;
+  min-width: 300px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+  flex-direction: column;
+  gap: 2px;
+}
+#menu-panel.open { display: flex; }
+#menu-panel button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.menu-hr { height: 1px; background: #30363d; margin: 4px 0; flex-shrink: 0; }
+.menu-help { padding: 6px 8px 4px; }
+.menu-help b { color: #cdd9e5; display: block; margin-bottom: 5px; font-size: 11px; letter-spacing: 0.3px; }
+.menu-help table { border-collapse: collapse; width: 100%; }
+.menu-help tr { line-height: 1; }
+.menu-help td { padding: 3px 4px; vertical-align: middle; white-space: nowrap; font-size: 11px; color: #8b949e; }
+.menu-help td:last-child { padding-left: 10px; color: #cdd9e5; }
+.menu-help kbd {
+  display: inline-block;
+  background: #0d1117;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  margin: 0 1px;
+  font-family: inherit;
+  color: #cdd9e5;
+  line-height: 1.4;
+}
+
+/* ── Render mode buttons ─────────────────────────────────────────────────────── */
+#render-btns { display: flex; gap: 2px; }
+.rmode { padding: 2px 8px; font-size: 13px; }
+.rmode.active { background: #0f3460; border-color: #58a6ff; color: #58a6ff; }
+
+/* ── Light theme additions ───────────────────────────────────────────────────── */
+body.light #menu-panel { background: #fff; border-color: #d0d7de; box-shadow: 0 6px 18px rgba(0,0,0,0.15); }
+body.light #menu-panel button { background: transparent; color: #1f2328; border-color: transparent; }
+body.light #menu-panel button:hover { background: #eaeef2; border-color: #d0d7de; }
+body.light .menu-hr { background: #d0d7de; }
+body.light .menu-help { color: #656d76; }
+body.light .menu-help b { color: #1f2328; }
+body.light .menu-help kbd { background: #eaeef2; border-color: #d0d7de; color: #1f2328; }
+body.light .rmode.active { background: #ddeeff; border-color: #0969da; color: #0969da; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <span class="lbl">Grid X</span>
+  <input type="number" id="inp-gx" value="20" min="4" max="64">
+  <span class="lbl">Y</span>
+  <input type="number" id="inp-gy" value="20" min="4" max="64">
+  <span class="lbl">Z (height)</span>
+  <input type="number" id="inp-gz" value="16" min="2" max="32">
+  <button id="btn-apply">Apply</button>
+  <div id="menu-wrap">
+    <button id="btn-menu">☰ Menu</button>
+    <div id="menu-panel">
+      <button id="btn-clear">⚠ Clear All (hold 2 s)</button>
+      <div class="menu-hr"></div>
+      <button id="btn-export">↑ Export CSV</button>
+      <button id="btn-import">↓ Import CSV</button>
+      <input type="file" id="file-inp" accept=".csv" style="display:none">
+      <div class="menu-hr"></div>
+      <div class="menu-help">
+        <b>Keyboard shortcuts</b>
+        <table>
+          <tr><td><kbd>1</kbd>–<kbd>0</kbd></td><td>Select color</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Eraser</td></tr>
+          <tr><td><kbd>W</kbd><kbd>S</kbd> / <kbd>↑</kbd><kbd>↓</kbd></td><td>Change Z level</td></tr>
+          <tr><td>Scroll on paint grid</td><td>Change Z level</td></tr>
+          <tr><td><kbd>RMB</kbd> on grid</td><td>Erase cell</td></tr>
+          <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo</td></tr>
+          <tr><td><kbd>Ctrl+Y</kbd> / <kbd>Ctrl+⇧+Z</kbd></td><td>Redo</td></tr>
+          <tr><td><kbd>Alt+C</kbd></td><td>Copy Z level</td></tr>
+          <tr><td><kbd>Alt+V</kbd></td><td>Paste Z level</td></tr>
+          <tr><td>Dbl-click swatch</td><td>Change color</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+  <div id="palette"></div>
+  <input type="color" id="col-picker" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none">
+  <div class="sep"></div>
+
+  <div id="render-btns">
+    <button class="rmode active" data-mode="solid"    title="Solid shading">■</button>
+    <button class="rmode"        data-mode="outlined" title="Outlined blocks">⊡</button>
+    <button class="rmode"        data-mode="flat"     title="Flat / unlit">◻</button>
+  </div>
+  <div class="sep"></div>
+
+  <span class="lbl">Level</span>
+  <button id="btn-zd" title="Lower level (S / ↓)">▼</button>
+  <span id="z-val">0</span>
+  <button id="btn-zu" title="Raise level (W / ↑)">▲</button>
+  <button id="btn-copy-z" title="Copy this Z-level (Alt+C)">Copy Z</button>
+  <button id="btn-paste-z" title="Paste to this Z-level (Alt+V)" disabled>Paste Z</button>
+
+  <div class="sep"></div>
+
+  <span class="lbl">Ghost</span>
+  <input type="range" id="inp-ghost" min="0" max="70" value="25">
+  <span id="ghost-pct" class="lbl">25%</span>
+
+  <div class="sep" style="margin-left:auto"></div>
+  <button id="btn-theme" title="Toggle dark / light theme">☀</button>
+</div>
+
+<div id="main">
+  <div class="panel" id="panel-front">
+    <canvas id="cv-front"></canvas>
+    <span class="plbl">Front view — X→ Z↑ (Y projected)</span>
+  </div>
+  <div class="panel" id="panel-3d">
+    <canvas id="cv-3d"></canvas>
+    <span class="plbl">3D view — drag rotate · scroll zoom</span>
+  </div>
+  <div class="panel" id="panel-paint">
+    <canvas id="cv-paint"></canvas>
+    <span class="plbl" id="lbl-paint">Paint · Z:0 — LMB paint · RMB erase · scroll=level</span>
+  </div>
+  <div class="panel" id="panel-side">
+    <canvas id="cv-side"></canvas>
+    <span class="plbl">Side view — Y→ Z↑ (X projected)</span>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="statusbar">
+  <span class="lbl">Keys: <b>1–0</b>=colors · <b>E</b>=erase · <b>W/S ↑↓</b>=level · <b>scroll</b>=level on paint grid</span>
+  <span class="lbl">Cursor: <b id="st-pos">—</b></span>
+  <span class="lbl">Blocks: <b id="st-blocks">0</b></span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+'use strict';
+
+// ── Palette definition ────────────────────────────────────────────────────────
+const COLORS = [
+  { n: 'Stone',    h: '#7a7a7a' },
+  { n: 'Dirt',     h: '#8B5E3C' },
+  { n: 'Wood',     h: '#A0622D' },
+  { n: 'Grass',    h: '#56a832' },
+  { n: 'Sand',     h: '#E8C97E' },
+  { n: 'Water',    h: '#1565c0' },
+  { n: 'Brick',    h: '#B85C38' },
+  { n: 'Cobble',   h: '#9e9e9e' },
+  { n: 'Obsidian', h: '#4a148c' },
+  { n: 'Glow',     h: '#f9a825' },
+];
+
+// ── Voxel state ───────────────────────────────────────────────────────────────
+let GX = 20, GY = 20, GZ = 16;
+let CZ = 0;
+let tool = 1;           // 0 = eraser, 1-10 = color
+let ghostAlpha = 0.25;
+let voxels = null;      // Uint8Array [z*GY*GX + y*GX + x]
+let painting = false;
+let paintVal = 1;
+
+function mkVoxels() { voxels = new Uint8Array(GX * GY * GZ); }
+function vget(x, y, z) { return voxels[z * GY * GX + y * GX + x]; }
+function vset(x, y, z, v) { voxels[z * GY * GX + y * GX + x] = v; }
+function countBlocks() { let n = 0; for (let i = 0; i < voxels.length; i++) if (voxels[i]) n++; return n; }
+
+// ── Palette UI ────────────────────────────────────────────────────────────────
+function countPerColor() {
+  const cnt = new Int32Array(11);
+  for (let i = 0; i < voxels.length; i++) if (voxels[i]) cnt[voxels[i]]++;
+  return cnt;
+}
+
+function updateCounts() {
+  const cnt = countPerColor();
+  document.querySelectorAll('.pal-count').forEach((el, i) => {
+    el.textContent = cnt[i + 1] > 0 ? cnt[i + 1] : '';
+  });
+}
+
+const colPicker = document.getElementById('col-picker');
+let pickerTarget = -1;
+
+colPicker.addEventListener('input', e => {
+  if (pickerTarget < 0) return;
+  const hex = e.target.value;
+  COLORS[pickerTarget].h = hex;
+  const swatch = document.querySelectorAll('.swatch')[pickerTarget];
+  if (swatch) swatch.style.background = hex;
+  const ci = pickerTarget + 1;
+  const hexInt = parseInt(hex.slice(1), 16);
+  for (const mode of ['solid', 'outlined', 'flat']) {
+    const key = mode + ci;
+    if (matCache[key]) matCache[key].color.setHex(hexInt);
+  }
+  drawAll();
+  rebuild3D();
+});
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const ttEl = document.getElementById('tooltip');
+let ttTimer = null;
+
+function showTT(html, anchorEl) {
+  clearTimeout(ttTimer);
+  ttEl.innerHTML = html;
+  const r = anchorEl.getBoundingClientRect();
+  ttEl.style.left = (r.left + r.width / 2) + 'px';
+  ttEl.style.top  = (r.bottom + 7) + 'px';
+  ttTimer = setTimeout(() => ttEl.classList.add('visible'), 450);
+}
+
+function hideTT() {
+  clearTimeout(ttTimer);
+  ttEl.classList.remove('visible');
+}
+
+function buildPalette() {
+  const el = document.getElementById('palette');
+  el.innerHTML = '';
+  COLORS.forEach((c, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'pal-item';
+
+    const d = document.createElement('div');
+    d.className = 'swatch' + (tool === i + 1 ? ' sel' : '');
+    d.style.background = c.h;
+    d.addEventListener('click', () => { tool = i + 1; syncPal(); });
+    d.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      hideTT();
+      pickerTarget = i;
+      colPicker.value = COLORS[i].h;
+      colPicker.click();
+    });
+
+    const cnt = document.createElement('span');
+    cnt.className = 'pal-count';
+
+    wrap.appendChild(d);
+    wrap.appendChild(cnt);
+    wrap.addEventListener('mouseenter', () =>
+      showTT(`<b>${c.n}</b> &nbsp;<span class="tt-key">${i + 1}</span>&nbsp; double-click to change color`, wrap)
+    );
+    wrap.addEventListener('mouseleave', hideTT);
+    el.appendChild(wrap);
+  });
+
+  const er = document.createElement('div');
+  er.className = 'eraser-tool' + (tool === 0 ? ' sel' : '');
+  er.textContent = '✕';
+  er.title = 'Eraser (E)';
+  er.addEventListener('click', () => { tool = 0; syncPal(); });
+  el.appendChild(er);
+}
+
+function syncPal() {
+  document.querySelectorAll('.swatch').forEach((s, i) => s.classList.toggle('sel', tool === i + 1));
+  const er = document.querySelector('.eraser-tool');
+  if (er) er.classList.toggle('sel', tool === 0);
+}
+
+// ── Undo / Redo ───────────────────────────────────────────────────────────────
+const undoStack = [];
+const redoStack = [];
+const MAX_HIST = 60;
+
+function pushHistory() {
+  undoStack.push(voxels.slice());
+  if (undoStack.length > MAX_HIST) undoStack.shift();
+  redoStack.length = 0;
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(voxels.slice());
+  voxels.set(undoStack.pop());
+  drawAll();
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(voxels.slice());
+  voxels.set(redoStack.pop());
+  drawAll();
+}
+
+// ── Canvas refs ───────────────────────────────────────────────────────────────
+const cvPaint = document.getElementById('cv-paint');
+const cvFront = document.getElementById('cv-front');
+const cvSide  = document.getElementById('cv-side');
+const cv3d    = document.getElementById('cv-3d');
+const px = cvPaint.getContext('2d');
+const fx = cvFront.getContext('2d');
+const sx = cvSide.getContext('2d');
+
+function resizePanels() {
+  [cvPaint, cvFront, cvSide, cv3d].forEach(cv => {
+    const p = cv.parentElement;
+    cv.width  = p.clientWidth;
+    cv.height = p.clientHeight;
+  });
+  if (renderer) {
+    const p = document.getElementById('panel-3d');
+    renderer.setSize(p.clientWidth, p.clientHeight);
+    camera.aspect = p.clientWidth / p.clientHeight;
+    camera.updateProjectionMatrix();
+  }
+}
+
+// ── 2D drawing helpers ────────────────────────────────────────────────────────
+function hexRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+function drawGridLines(ctx, ox, oy, cols, rows, cs, style) {
+  ctx.strokeStyle = style;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let i = 0; i <= cols; i++) { ctx.moveTo(ox + i*cs, oy); ctx.lineTo(ox + i*cs, oy + rows*cs); }
+  for (let i = 0; i <= rows; i++) { ctx.moveTo(ox, oy + i*cs); ctx.lineTo(ox + cols*cs, oy + i*cs); }
+  ctx.stroke();
+}
+
+function squareLayout(W, H, cols, rows) {
+  const cs = Math.min(W / cols, H / rows);
+  return { cs, ox: (W - cs * cols) / 2, oy: (H - cs * rows) / 2 };
+}
+
+// ── Theme helper ─────────────────────────────────────────────────────────────
+const th = (dark, light) => document.body.classList.contains('light') ? light : dark;
+
+// ── Paint view: top-down XY at CZ ────────────────────────────────────────────
+function drawPaint() {
+  const W = cvPaint.width, H = cvPaint.height;
+  const { cs, ox, oy } = squareLayout(W, H, GX, GY);
+  px.fillStyle = th('#090f18', '#f0f4fa'); px.fillRect(0, 0, W, H);
+
+  function ghostLayer(gz) {
+    if (gz < 0 || gz >= GZ) return;
+    for (let y = 0; y < GY; y++)
+      for (let x = 0; x < GX; x++) {
+        const c = vget(x, y, gz);
+        if (c) { px.fillStyle = hexRgba(COLORS[c-1].h, ghostAlpha); px.fillRect(ox+x*cs, oy+(GY-1-y)*cs, cs, cs); }
+      }
+  }
+  ghostLayer(CZ - 1);
+  ghostLayer(CZ + 1);
+
+  for (let y = 0; y < GY; y++)
+    for (let x = 0; x < GX; x++) {
+      const c = vget(x, y, CZ);
+      if (c) { px.fillStyle = COLORS[c-1].h; px.fillRect(ox+x*cs, oy+(GY-1-y)*cs, cs, cs); }
+    }
+
+  drawGridLines(px, ox, oy, GX, GY, cs, th('rgba(255,255,255,0.07)', 'rgba(0,0,0,0.08)'));
+  px.strokeStyle = th('#58a6ff', '#0969da'); px.lineWidth = 1.5;
+  px.strokeRect(ox+0.75, oy+0.75, GX*cs-1.5, GY*cs-1.5);
+}
+
+// ── Front view: X→ Z↑ (project over Y, show nearest) ─────────────────────────
+function drawFront() {
+  const W = cvFront.width, H = cvFront.height;
+  const { cs, ox, oy } = squareLayout(W, H, GX, GZ);
+  fx.fillStyle = th('#050d18', '#e8edf3'); fx.fillRect(0, 0, W, H);
+
+  for (let z = 0; z < GZ; z++)
+    for (let x = 0; x < GX; x++) {
+      let c = 0;
+      for (let y = 0; y < GY && !c; y++) c = vget(x, y, z);
+      if (c) { fx.fillStyle = COLORS[c-1].h; fx.fillRect(ox+x*cs+0.5, oy+(GZ-1-z)*cs+0.5, cs-0.5, cs-0.5); }
+    }
+
+  fx.strokeStyle = th('rgba(88,166,255,0.55)', 'rgba(9,105,218,0.5)'); fx.lineWidth = 1.5;
+  fx.strokeRect(ox, oy+(GZ-1-CZ)*cs, GX*cs, cs);
+
+  drawGridLines(fx, ox, oy, GX, GZ, cs, th('rgba(88,166,255,0.08)', 'rgba(9,105,218,0.1)'));
+  fx.strokeStyle = th('#1a3050', '#c0ccdd'); fx.lineWidth = 1;
+  fx.strokeRect(ox, oy, GX*cs, GZ*cs);
+}
+
+// ── Side view: Y→ Z↑ (project over X, show nearest) ──────────────────────────
+function drawSide() {
+  const W = cvSide.width, H = cvSide.height;
+  const { cs, ox, oy } = squareLayout(W, H, GY, GZ);
+  sx.fillStyle = th('#050d18', '#e8edf3'); sx.fillRect(0, 0, W, H);
+
+  for (let z = 0; z < GZ; z++)
+    for (let y = 0; y < GY; y++) {
+      let c = 0;
+      for (let x = 0; x < GX && !c; x++) c = vget(x, y, z);
+      if (c) { sx.fillStyle = COLORS[c-1].h; sx.fillRect(ox+y*cs+0.5, oy+(GZ-1-z)*cs+0.5, cs-0.5, cs-0.5); }
+    }
+
+  sx.strokeStyle = th('rgba(88,166,255,0.55)', 'rgba(9,105,218,0.5)'); sx.lineWidth = 1.5;
+  sx.strokeRect(ox, oy+(GZ-1-CZ)*cs, GY*cs, cs);
+
+  drawGridLines(sx, ox, oy, GY, GZ, cs, th('rgba(88,166,255,0.08)', 'rgba(9,105,218,0.1)'));
+  sx.strokeStyle = th('#1a3050', '#c0ccdd'); sx.lineWidth = 1;
+  sx.strokeRect(ox, oy, GY*cs, GZ*cs);
+}
+
+function drawAll() {
+  drawPaint(); drawFront(); drawSide(); schedule3D();
+  document.getElementById('st-blocks').textContent = countBlocks();
+  updateCounts();
+}
+
+// ── Paint input ───────────────────────────────────────────────────────────────
+function canvasCell(e, cv) {
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const cs = Math.min(r.width / GX, r.height / GY);
+  const ox = (r.width - cs * GX) / 2, oy = (r.height - cs * GY) / 2;
+  return {
+    x: Math.floor((mx - ox) / cs),
+    y: GY - 1 - Math.floor((my - oy) / cs)
+  };
+}
+
+function applyPaint(x, y) {
+  if (x < 0 || x >= GX || y < 0 || y >= GY) return;
+  if (vget(x, y, CZ) === paintVal) return;
+  vset(x, y, CZ, paintVal);
+  drawAll();
+}
+
+cvPaint.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  pushHistory();
+  painting = true;
+  paintVal = tool;
+  const { x, y } = canvasCell(e, cvPaint);
+  applyPaint(x, y);
+  document.getElementById('st-pos').textContent = `X:${x} Y:${y} Z:${CZ}`;
+});
+
+cvPaint.addEventListener('mousemove', e => {
+  const { x, y } = canvasCell(e, cvPaint);
+  document.getElementById('st-pos').textContent = `X:${x} Y:${y} Z:${CZ}`;
+  if (painting) applyPaint(x, y);
+});
+
+window.addEventListener('mouseup', () => { painting = false; });
+
+cvPaint.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const { x, y } = canvasCell(e, cvPaint);
+  if (x < 0 || x >= GX || y < 0 || y >= GY) return;
+  pushHistory();
+  vset(x, y, CZ, 0);
+  drawAll();
+});
+
+cvPaint.addEventListener('wheel', e => {
+  e.preventDefault();
+  setZ(CZ + (e.deltaY < 0 ? 1 : -1));
+}, { passive: false });
+
+// ── Z-level controls ──────────────────────────────────────────────────────────
+function setZ(nz) {
+  CZ = Math.max(0, Math.min(GZ - 1, nz));
+  document.getElementById('z-val').textContent = CZ;
+  document.getElementById('lbl-paint').textContent = `Paint · Z:${CZ} — LMB paint · RMB erase · scroll=level`;
+  drawAll();
+}
+
+document.getElementById('btn-zu').addEventListener('click', () => setZ(CZ + 1));
+document.getElementById('btn-zd').addEventListener('click', () => setZ(CZ - 1));
+
+// ── Ghost opacity ─────────────────────────────────────────────────────────────
+document.getElementById('inp-ghost').addEventListener('input', e => {
+  ghostAlpha = +e.target.value / 100;
+  document.getElementById('ghost-pct').textContent = e.target.value + '%';
+  drawPaint();
+});
+
+// ── Grid size ─────────────────────────────────────────────────────────────────
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+document.getElementById('btn-apply').addEventListener('click', () => {
+  GX = clamp(+document.getElementById('inp-gx').value | 0, 4, 64);
+  GY = clamp(+document.getElementById('inp-gy').value | 0, 4, 64);
+  GZ = clamp(+document.getElementById('inp-gz').value | 0, 2, 32);
+  document.getElementById('inp-gx').value = GX;
+  document.getElementById('inp-gy').value = GY;
+  document.getElementById('inp-gz').value = GZ;
+  CZ = Math.min(CZ, GZ - 1);
+  undoStack.length = 0; redoStack.length = 0;
+  levelClip = null; updatePasteBtn();
+  mkVoxels();
+  setZ(CZ);
+  rebuild3D();
+});
+
+// Hold 2 s to clear
+(function () {
+  const btn = document.getElementById('btn-clear');
+  let timer = null;
+  const cancel = () => { clearTimeout(timer); btn.classList.remove('holding'); };
+  btn.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    btn.classList.add('holding');
+    timer = setTimeout(() => {
+      btn.classList.remove('holding');
+      pushHistory();
+      mkVoxels();
+      drawAll();
+      rebuild3D();
+    }, 2000);
+  });
+  btn.addEventListener('mouseup', cancel);
+  btn.addEventListener('mouseleave', cancel);
+})();
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+    if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); redo(); return; }
+  }
+  if (e.altKey) {
+    if (e.key === 'c' || e.key === 'C') { e.preventDefault(); copyLevel(); return; }
+    if (e.key === 'v' || e.key === 'V') { e.preventDefault(); pasteLevel(); return; }
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'ArrowUp'   || e.key === 'w' || e.key === 'W') { e.preventDefault(); setZ(CZ + 1); }
+  if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { e.preventDefault(); setZ(CZ - 1); }
+  if (e.key >= '1' && e.key <= '9') { tool = +e.key; syncPal(); }
+  if (e.key === '0') { tool = 10; syncPal(); }
+  if (e.key === 'e' || e.key === 'E') { tool = 0; syncPal(); }
+});
+
+// ── Copy / Paste Z-level ──────────────────────────────────────────────────────
+let levelClip = null;
+
+function updatePasteBtn() {
+  document.getElementById('btn-paste-z').disabled = !levelClip;
+}
+
+function copyLevel() {
+  levelClip = new Uint8Array(GX * GY);
+  for (let y = 0; y < GY; y++)
+    for (let x = 0; x < GX; x++)
+      levelClip[y * GX + x] = vget(x, y, CZ);
+  updatePasteBtn();
+}
+
+function pasteLevel() {
+  if (!levelClip) return;
+  pushHistory();
+  for (let y = 0; y < GY; y++)
+    for (let x = 0; x < GX; x++)
+      vset(x, y, CZ, levelClip[y * GX + x]);
+  drawAll();
+}
+
+document.getElementById('btn-copy-z').addEventListener('click', copyLevel);
+document.getElementById('btn-paste-z').addEventListener('click', pasteLevel);
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function applyTheme(light) {
+  document.body.classList.toggle('light', light);
+  document.getElementById('btn-theme').textContent = light ? '🌙' : '☀';
+  if (scene) scene.background = new THREE.Color(light ? 0xf0f4f8 : 0x0a1020);
+  drawAll();
+}
+
+document.getElementById('btn-theme').addEventListener('click', () =>
+  applyTheme(!document.body.classList.contains('light'))
+);
+
+// ── Render mode ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.rmode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    renderMode = btn.dataset.mode;
+    document.querySelectorAll('.rmode').forEach(b => b.classList.toggle('active', b === btn));
+    rebuild3D();
+  });
+});
+
+// ── Menu toggle ───────────────────────────────────────────────────────────────
+(function () {
+  const wrap  = document.getElementById('menu-wrap');
+  const panel = document.getElementById('menu-panel');
+  document.getElementById('btn-menu').addEventListener('click', e => {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+  document.addEventListener('click', e => {
+    if (!wrap.contains(e.target)) panel.classList.remove('open');
+  });
+})();
+
+// ── CSV Export / Import ───────────────────────────────────────────────────────
+function exportCSV() {
+  const rows = ['# VS Building Planner', `# gx=${GX},gy=${GY},gz=${GZ}`, 'x,y,z,color'];
+  for (let z = 0; z < GZ; z++)
+    for (let y = 0; y < GY; y++)
+      for (let x = 0; x < GX; x++) {
+        const c = vget(x, y, z);
+        if (c) rows.push(`${x},${y},${z},${c}`);
+      }
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'building.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importCSV(text) {
+  let gx = GX, gy = GY, gz = GZ;
+  const dataLines = [];
+  for (const raw of text.trim().split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('#')) {
+      const m = line.match(/gx=(\d+),gy=(\d+),gz=(\d+)/);
+      if (m) { gx = +m[1]; gy = +m[2]; gz = +m[3]; }
+    } else if (line && line !== 'x,y,z,color') {
+      dataLines.push(line);
+    }
+  }
+  GX = clamp(gx, 4, 64);
+  GY = clamp(gy, 4, 64);
+  GZ = clamp(gz, 2, 32);
+  CZ = Math.min(CZ, GZ - 1);
+  mkVoxels();
+  document.getElementById('inp-gx').value = GX;
+  document.getElementById('inp-gy').value = GY;
+  document.getElementById('inp-gz').value = GZ;
+  for (const line of dataLines) {
+    const p = line.split(',');
+    if (p.length < 4) continue;
+    const x = +p[0], y = +p[1], z = +p[2], c = +p[3];
+    if (x >= 0 && x < GX && y >= 0 && y < GY && z >= 0 && z < GZ && c >= 1 && c <= 10)
+      vset(x, y, z, c);
+  }
+  setZ(CZ);
+  rebuild3D();
+}
+
+document.getElementById('btn-export').addEventListener('click', exportCSV);
+document.getElementById('btn-import').addEventListener('click', () =>
+  document.getElementById('file-inp').click()
+);
+document.getElementById('file-inp').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => importCSV(ev.target.result);
+  r.readAsText(f);
+  e.target.value = '';
+});
+
+// ── Three.js 3D view ──────────────────────────────────────────────────────────
+let scene, camera, renderer, orbitCtrl, blockGrp;
+let renderMode = 'solid';
+
+// Face table: neighbor offset [dx,dy,dz] in voxel coords (x=horiz,y=depth,z=height),
+// 4 verts [lx,ly,lz] in local unit-cube, normal in Three.js space.
+// Three.js position = (vx+lx, vz+ly, vy+lz).
+const FACES = [
+  { d:[ 1, 0, 0], v:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]], n:[ 1, 0, 0] }, // +X
+  { d:[-1, 0, 0], v:[[0,0,0],[0,0,1],[0,1,1],[0,1,0]], n:[-1, 0, 0] }, // -X
+  { d:[ 0, 0, 1], v:[[0,1,0],[0,1,1],[1,1,1],[1,1,0]], n:[ 0, 1, 0] }, // top
+  { d:[ 0, 0,-1], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]], n:[ 0,-1, 0] }, // bottom
+  { d:[ 0, 1, 0], v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]], n:[ 0, 0, 1] }, // front
+  { d:[ 0,-1, 0], v:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]], n:[ 0, 0,-1] }, // back
+];
+
+const matCache = {};
+
+function getMat(ci, mode) {
+  const key = mode + ci;
+  if (!matCache[key]) {
+    const hex = parseInt(COLORS[ci-1].h.slice(1), 16);
+    matCache[key] = mode === 'flat'
+      ? new THREE.MeshBasicMaterial({ color: hex })
+      : new THREE.MeshLambertMaterial({ color: hex });
+  }
+  return matCache[key];
+}
+
+function buildFaceGeom(ci) {
+  const pos = [], nrm = [];
+  for (let vz = 0; vz < GZ; vz++)
+    for (let vy = 0; vy < GY; vy++)
+      for (let vx = 0; vx < GX; vx++) {
+        if (vget(vx, vy, vz) !== ci) continue;
+        for (const f of FACES) {
+          const nx = vx+f.d[0], ny = vy+f.d[1], nz = vz+f.d[2];
+          const nv = (nx<0||nx>=GX||ny<0||ny>=GY||nz<0||nz>=GZ) ? 0 : vget(nx,ny,nz);
+          if (nv !== 0) continue;
+          const [a,b,c,d] = f.v;
+          for (const [lx,ly,lz] of [a,b,c, a,c,d]) {
+            pos.push(vx+lx, vz+ly, vy+lz);
+            nrm.push(f.n[0], f.n[1], f.n[2]);
+          }
+        }
+      }
+  const g = new THREE.BufferGeometry();
+  if (pos.length) {
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    g.setAttribute('normal',   new THREE.BufferAttribute(new Float32Array(nrm), 3));
+  }
+  return g;
+}
+
+function buildEdgeGeom() {
+  const pts = [];
+  for (let vz = 0; vz < GZ; vz++)
+    for (let vy = 0; vy < GY; vy++)
+      for (let vx = 0; vx < GX; vx++) {
+        if (!vget(vx, vy, vz)) continue;
+        for (const f of FACES) {
+          const nx = vx+f.d[0], ny = vy+f.d[1], nz = vz+f.d[2];
+          const nv = (nx<0||nx>=GX||ny<0||ny>=GY||nz<0||nz>=GZ) ? 0 : vget(nx,ny,nz);
+          if (nv !== 0) continue;
+          const [a,b,c,d] = f.v;
+          for (const [p,q] of [[a,b],[b,c],[c,d],[d,a]])
+            pts.push(vx+p[0], vz+p[1], vy+p[2], vx+q[0], vz+q[1], vy+q[2]);
+        }
+      }
+  const g = new THREE.BufferGeometry();
+  if (pts.length) g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+  return g;
+}
+
+function init3D() {
+  const p = document.getElementById('panel-3d');
+  const W = p.clientWidth, H = p.clientHeight;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(th(0x0a1020, 0xf0f4f8));
+
+  camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 500);
+  camera.position.set(GX * 0.9 + GX/2, GZ * 0.9 + GZ/2, GY * 1.4 + GY/2);
+
+  renderer = new THREE.WebGLRenderer({ canvas: cv3d, antialias: true });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const d1 = new THREE.DirectionalLight(0xffffff, 0.9);
+  d1.position.set(30, 50, 20); scene.add(d1);
+  const d2 = new THREE.DirectionalLight(0x5577aa, 0.3);
+  d2.position.set(-10, 5, -15); scene.add(d2);
+
+  const gridSize = Math.max(GX, GY);
+  const gh = new THREE.GridHelper(gridSize * 2, gridSize, 0x1a3050, 0x1a3050);
+  gh.position.set(GX / 2, -0.01, GY / 2);
+  scene.add(gh);
+
+  orbitCtrl = new THREE.OrbitControls(camera, cv3d);
+  orbitCtrl.target.set(GX / 2, GZ / 2, GY / 2);
+  orbitCtrl.enableDamping = true;
+  orbitCtrl.dampingFactor = 0.1;
+  orbitCtrl.update();
+
+  blockGrp = new THREE.Group();
+  scene.add(blockGrp);
+
+  (function loop() {
+    requestAnimationFrame(loop);
+    orbitCtrl.update();
+    renderer.render(scene, camera);
+  })();
+}
+
+function rebuild3D() {
+  if (!blockGrp) return;
+  for (const child of blockGrp.children)
+    if (child.geometry) child.geometry.dispose();
+  while (blockGrp.children.length) blockGrp.remove(blockGrp.children[0]);
+
+  for (let ci = 1; ci <= 10; ci++) {
+    const geom = buildFaceGeom(ci);
+    if (!geom.attributes.position) { geom.dispose(); continue; }
+    const mat = getMat(ci, renderMode);
+    mat.polygonOffset = true; mat.polygonOffsetFactor = 1; mat.polygonOffsetUnits = 1;
+    blockGrp.add(new THREE.Mesh(geom, mat));
+  }
+
+  if (renderMode === 'outlined') {
+    const egeom = buildEdgeGeom();
+    if (egeom.attributes.position) {
+      const isDark = !document.body.classList.contains('light');
+      blockGrp.add(new THREE.LineSegments(egeom,
+        new THREE.LineBasicMaterial({ color: isDark ? 0x000000 : 0x111111, opacity: 0.5, transparent: true })));
+    } else { egeom.dispose(); }
+  }
+}
+
+let _t3 = null;
+function schedule3D() { clearTimeout(_t3); _t3 = setTimeout(rebuild3D, 100); }
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+mkVoxels();
+buildPalette();
+
+window.addEventListener('load', () => {
+  resizePanels();
+  init3D();
+  drawAll();
+});
+
+window.addEventListener('resize', () => {
+  resizePanels();
+  drawAll();
+  rebuild3D();
+});
+</script>
+</body>
+</html>
